@@ -1,0 +1,65 @@
+# my global config
+global:
+  scrape_interval:     60s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 60s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+# Alertmanager configuration
+#alerting:
+#  alertmanagers:
+#  - static_configs:
+#    - targets:
+#      # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+  - "prometheus.rules.yml"
+
+
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'pines'
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+    - targets: ['10.0.0.3:9100']
+
+
+        #  - job_name: 'cadvisor'
+        #    static_configs:
+        #      - targets:i ['cadvisor:8080']
+
+  - job_name: 'crowdsec'
+    static_configs:
+    - targets: ['127.0.0.1:6060']
+
+
+#go client-exmaple-random 122819
+#  - job_name: 'example-random'
+# 
+#       # Override the global default and scrape targets from this job every 5 seconds.
+#    scrape_interval: 5s
+#
+#    static_configs:
+#      - targets: ['10.0.0.10:8080', '10.0.0.10:8081']
+#        labels:
+#          group: 'production'
+#
+#      - targets: ['10.0.0.10:8082']
+#        labels:
+#          group: 'canary' 
+
+remote_write:
+  - url: "http://influxdb:8086/api/v1/prom/write?db=prometheus"
+
+remote_read:
+  - url: "http://influxdb:8086/api/v1/prom/read?db=prometheus"
+
+
