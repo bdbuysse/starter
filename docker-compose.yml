@@ -1,0 +1,190 @@
+version: "3.7"
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    restart: always
+    logging:
+      driver: syslog
+      options:
+              tag: docker-mqtt
+    ports:
+      - 1883:1883
+      - 8883:8883
+    volumes:
+      - /usr/local/share/docker/mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - /usr/local/share/docker/mosquitto/data:/mosquitto/data
+      - /usr/local/share/docker/mosquitto/config/mosquitto.passwd:/etc/mosquitto/passwd
+      - /usr/local/share/docker/mosquitto/log/mosquitto.log:/var/log/mosquitto.log
+#    environment:
+#      - PUID=${PUID}
+#      - PGID=${PGID}i
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'     
+      - '--web.external-url=https://xxx.net:9090/prometheus/'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'  
+    environment:
+      - PUID=1000
+      - PGID=1000
+    restart: unless-stopped
+    networks: 
+      - dockerlocal
+    volumes:
+      - /usr/local/share/docker/prometheus/config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - /usr/local/share/docker/prometheus/config:/etc/prometheus
+      - prometheus-data:/prometheus
+    ports:
+      - 9090:9090
+
+  node-red:
+    build: /usr/local/share/docker/node-red/.
+    container_name: node-red
+    hostname: node-red
+    restart: unless-stopped
+    ports:
+      - 1880:1880
+    user: 1000:1000
+    depends_on:
+      - mosquitto
+      - influxdb
+#      - mongodb  
+    networks:
+      - dockerlocal      
+    volumes:
+      - /usr/local/share/docker/node-red:/data
+    environment:
+      - FLOWS=/data/flows.json
+
+
+  influxdb:
+    image: influxdb
+    container_name: influxdb
+    restart: unless-stopped
+    ports:
+      - 8086:8086
+    networks:
+      - dockerlocal
+    environment:
+      - DOCKER_INFLUXDB_INIT_USERNAME=XXX
+      - DOCKER_INFLUXDB_INIT_PASSWORD=readWrite
+      - DOCKER_INFLUXDB_INIT_ORG=XXX
+      - DOCKER_INFLUXDB_INIT_BUCKET=XXX
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_RETENTION=52w
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=readWriteToken
+    volumes:
+      - /usr/local/share/docker/influxdb:/.influxdb2
+
+
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    restart: unless-stopped
+    volumes:
+      - /usr/local/share/docker/postgres/data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=readWrite 
+    ports:
+      - 5432:5432
+    networks:
+      - dockerlocal
+
+
+
+  zwave:
+    container_name: zwave
+    image: zwavejs/zwavejs2mqtt:latest
+    restart: always
+    tty: true
+    stop_signal: SIGINT
+    environment:
+      - SESSION_SECRET=XXX
+      - TZ=America/Chicago  # uncomment and edit to match you timezone if you want logs time and dates to match your timezone instead of UTC.
+    networks:
+      - dockerlocal 
+    devices:
+      - '/dev/ttyACM0:/dev/ttyACM0'
+    volumes:
+      - /usr/local/share/docker/zwavejs2mqtt:/usr/src/app/store
+    ports:
+      - '8091:8091' # port for web interface
+      - '3010:3000' # port for zwave-js websocket server
+
+  home-assistant:
+    image: homeassistant/home-assistant:stable
+    network_mode: host
+    container_name: home-assistant
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    volumes:
+      - /usr/local/share/docker/home-assistant/config/configuration.yaml:/config/configuration.yaml
+      - /usr/local/share/docker/home-assistant/config/:/config 
+      - /etc/localtime:/etc/localtime:ro
+    logging:
+        options:
+            max-size: "500m"
+            max-file: "3"
+
+  www:
+    image: ghcr.io/linuxserver/swag 
+    container_name: www
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Chicago
+      - URLxxx.net
+      - SUBDOMAINS=
+      - VALIDATION=http
+      - DNSPLUGIN=google #optional
+      - DUCKDNSTOKEN=token #optional
+      - EMAIL=xxx@xxx #optional
+      - DHLEVEL=2048 #optional
+      - ONLY_SUBDOMAINS=false #optional
+        #- EXTRA_DOMAINS=extradomains #optional
+      - STAGING=false #optional
+    volumes:
+      - /var/log/auth.log:/config/log/ssh/auth.log
+      - /usr/local/share/docker/www/config:/config
+    networks:
+      - dockerlocal
+    ports:
+      - 443:443
+      - 80:80 #optional
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:main-ubuntu
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    user: 1000:1000
+    depends_on:
+      - www
+      - node-red  
+      - influxdb
+      - prometheus  
+    networks:
+      - dockerlocal        
+    volumes:
+      - /usr/local/share/docker/grafana:/var/lib/grafana
+      - /usr/local/share/docker/grafana/defaults.ini:/usr/share/grafana/conf/defaults.ini:z
+#    environment:
+      #      - GF_INSTALL_PLUGINS=grafana-worldmap-panel,novalabs-annotations-panel,michaeldmoore-annunciator-panel,grafana-polystat-panel,grafana-piechart-panel,digrich-bubblechart-panel,snuids-radar-panel,andig-darksky-datasource,briangann-gauge-panel,yesoreyeram-boomtable-panel,yesoreyeram-boomtheme-panel,mxswat-separator-panel
+
+networks:
+  dockerlocal:
+
+volumes:
+  prometheus-data:
